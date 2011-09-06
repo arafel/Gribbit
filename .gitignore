@@ -1,3 +1,4 @@
 *.pyc
 *.swp
 gribbit_keys.py
+*.log
