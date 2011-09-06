@@ -15,9 +15,7 @@ api = tweepy.API(auth)
 old_date = ""
 last_id = -1
 
-print "Updating timeline..."
 tl = api.friends_timeline()
-print "Got %i tweets" % len(tl)
 
 while 1:
     tl.reverse()
@@ -32,6 +30,4 @@ while 1:
                                    tweet.user.screen_name, tweet.text)
         last_id = tweet.id
     time.sleep(1 * MINUTE)
-    print "Updating timeline..."
     tl = api.friends_timeline(since_id=last_id, count=1000)
-    print "Got %i tweets" % len(tl)
