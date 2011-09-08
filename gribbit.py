@@ -91,7 +91,8 @@ if options["catch_hup"]:
 
 # TODO make this a config option
 indent = " " * 17
-w = textwrap.TextWrapper(width=93, subsequent_indent=indent)
+# TODO discover right width?
+w = textwrap.TextWrapper(width=92, subsequent_indent=indent)
 
 tl = api.friends_timeline()
 
