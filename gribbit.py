@@ -3,6 +3,7 @@
 import time, logging
 import ConfigParser, string
 import signal, Queue
+import textwrap
 
 import tabnanny
 import sys, os
@@ -88,6 +89,10 @@ if options["catch_hup"]:
     logger.debug("Installing HUP handler")
     old_handler = signal.signal(signal.SIGHUP, handler)
 
+# TODO make this a config option
+indent = " " * 17
+w = textwrap.TextWrapper(width=93, subsequent_indent=indent)
+
 tl = api.friends_timeline()
 
 while 1:
@@ -102,8 +107,10 @@ while 1:
             old_date = new_date
         else:
             time_format = "      %H:%M:%S"
-        print "%s - %s: %s" % (tweet.created_at.strftime(time_format), \
-                                   tweet.user.screen_name, tweet.text)
+        text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, tweet.text)
+        lines = w.wrap(text)
+        for line in lines:
+            print line
         last_id = tweet.id
 
     try:
