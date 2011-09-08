@@ -39,24 +39,6 @@ def handler(signum, frame):
     local_logger.info("Signal handler called, signum %i", signum)
     wakeup_queue.put(signum)
 
-def apply_config_old(cfg):
-    # First apply whole program options
-    if cfg.has_section("gribbit"):
-        for option in cfg.options("gribbit"):
-            if option == "catch_hup":
-                options["catch_hup"] = cfg.getboolean("gribbit", option)
-                print "Set options.catch_hup to", options["catch_hup"]
-            if option == "log_debug":
-                options["log_debug"] = cfg.getboolean("gribbit", option)
-                print "Set options.log_debug to", options["log_debug"]
-
-    # Then any values that control updating
-    if cfg.has_section("updates"):
-        for option in cfg.options("updates"):
-            if option == "frequency":
-                options["update_frequency"] = cfg.getint("updates", option)
-                print "Set options.update_frequency to", options["update_frequency"]
-
 def apply_config(cfg, logger):
     for section in cfg.sections():
         for option in cfg.options(section):
