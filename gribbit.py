@@ -1,16 +1,26 @@
 #!/usr/bin/python
 
 import time, logging
+import ConfigParser, string
 import signal, Queue
+
 import tabnanny
 import sys
 
 import tweepy
 from gribbit_keys import *
 
-def setup_logging(name):
+options = { "catch_hup" : True,
+            "log_debug" : False,
+            # value in minutes
+            "update_frequency" : 5 }
+
+def setup_logging(name, log_debug=False):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+    if log_debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
     # Create a file handler which even logs debug messages
     fh = logging.FileHandler(name + ".log")
     fh.setLevel(logging.DEBUG)
@@ -29,11 +39,60 @@ def handler(signum, frame):
     local_logger.info("Signal handler called, signum %i", signum)
     wakeup_queue.put(signum)
 
+def apply_config_old(cfg):
+    # First apply whole program options
+    if cfg.has_section("gribbit"):
+        for option in cfg.options("gribbit"):
+            if option == "catch_hup":
+                options["catch_hup"] = cfg.getboolean("gribbit", option)
+                print "Set options.catch_hup to", options["catch_hup"]
+            if option == "log_debug":
+                options["log_debug"] = cfg.getboolean("gribbit", option)
+                print "Set options.log_debug to", options["log_debug"]
+
+    # Then any values that control updating
+    if cfg.has_section("updates"):
+        for option in cfg.options("updates"):
+            if option == "frequency":
+                options["update_frequency"] = cfg.getint("updates", option)
+                print "Set options.update_frequency to", options["update_frequency"]
+
+def apply_config(cfg, logger):
+    for section in cfg.sections():
+        for option in cfg.options(section):
+            logger.debug("Processing [%s, %s]" % (section, option))
+            if section == "gribbit" and option == "catch_hup":
+                options["catch_hup"] = cfg.getboolean(section, option)
+                logger.info("Set options.catch_hup to " + options["catch_hup"].__str__())
+            if section == "gribbit" and option == "log_debug":
+                options["log_debug"] = cfg.getboolean(section, option)
+                logger.info("Set options.log_debug to " + options["log_debug"].__str__())
+                if options["log_debug"]:
+                    logger.setLevel(logging.DEBUG)
+                else:
+                    logger.setLevel(logging.INFO)
+            if section == "updates" and option == "frequency":
+                options["update_frequency"] = cfg.getint(section, option)
+                logger.info("Set options.update_frequency to %i", options["update_frequency"])
+
+
+def load_config(logger):
+    cfg = ConfigParser.SafeConfigParser()
+    cfgfiles = cfg.read("gribbit.cfg")
+    if len(cfgfiles) > 0:
+        logger.info("Parsed config from " + string.join(cfgfiles, ', '))
+        print "Loaded config from " + string.join(cfgfiles, ', ')
+        apply_config(cfg, logger)
+    else:
+        logger.info("No config files to load, using defaults")
+        print "No config files to load, using defaults"
+
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
 api = tweepy.API(auth)
 
-logger = setup_logging("gribbit")
+logger = setup_logging("gribbit", log_debug=options["log_debug"])
+load_config(logger)
 
 wakeup_queue = Queue.Queue()
 logger.debug("Created queue")
@@ -42,7 +101,10 @@ MINUTE=60
 old_date = ""
 last_id = -1
 
-old_handler = signal.signal(signal.SIGHUP, handler)
+if options["catch_hup"]:
+    logger.debug("Installing HUP handler")
+    old_handler = signal.signal(signal.SIGHUP, handler)
+
 tl = api.friends_timeline()
 
 while 1:
@@ -62,12 +124,15 @@ while 1:
         last_id = tweet.id
 
     try:
-        item = wakeup_queue.get(True, 5 * MINUTE)
+        item = wakeup_queue.get(True, options["update_frequency"] * MINUTE)
         # If we reach this line we got a signal
         if hasattr(item, "__str__"):
             logger.info("Got signal %s", item.__str__())
         else:
             logger.info("Got signal, item has no string rep")
+        logger.info("Reloading config file")
+        print "Reloading config file"
+        load_config(logger)
         wakeup_queue.task_done()
     except Queue.Empty:
         # This is the usual case - timeout
@@ -80,5 +145,7 @@ while 1:
     logger.debug("Requesting tweets since %i", last_id)
     tl = api.friends_timeline(since_id=last_id, count=1000)
 
-# Restore old handler
-signal.signal(signal.SIGHUP, old_handler)
+if options["catch_hup"]:
+    # Restore old handler
+    logger.debug("Restoring old HUP handler")
+    signal.signal(signal.SIGHUP, old_handler)
