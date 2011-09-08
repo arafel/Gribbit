@@ -5,7 +5,7 @@ import ConfigParser, string
 import signal, Queue
 
 import tabnanny
-import sys
+import sys, os
 
 import tweepy
 from gribbit_keys import *
@@ -78,7 +78,8 @@ def apply_config(cfg, logger):
 
 def load_config(logger):
     cfg = ConfigParser.SafeConfigParser()
-    cfgfiles = cfg.read("gribbit.cfg")
+    # TODO check precedence order - what if config settings conflict?
+    cfgfiles = cfg.read(["gribbit.cfg", os.path.expanduser("~/.gribbit.cfg")])
     if len(cfgfiles) > 0:
         logger.info("Parsed config from " + string.join(cfgfiles, ', '))
         print "Loaded config from " + string.join(cfgfiles, ', ')
