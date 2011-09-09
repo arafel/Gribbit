@@ -9,13 +9,20 @@ import tabnanny
 import sys, os
 
 import tweepy
-from gribbit_keys import *
 
 options = { "catch_hup" : True,
             "log_debug" : False,
             "text_wrap" : True,
             # value in minutes
             "update_frequency" : 5 }
+
+class MalformedKeyFile(Exception):
+    def __init__(self):
+        pass
+
+class KeyFileNotFound(IOError):
+    def __init__(self):
+        pass
 
 def setup_logging(name, log_debug=False):
     logger = logging.getLogger(name)
@@ -26,13 +33,8 @@ def setup_logging(name, log_debug=False):
     # Create a file handler which even logs debug messages
     fh = logging.FileHandler(name + ".log")
     fh.setLevel(logging.DEBUG)
-    # Create a console handler which only logs error messages
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
     fh.setFormatter(formatter)
-    logging.getLogger('').addHandler(ch)
     logging.getLogger('').addHandler(fh)
     return logger
 
@@ -68,18 +70,42 @@ def load_config(logger):
     cfgfiles = cfg.read(["gribbit.cfg", os.path.expanduser("~/.gribbit.cfg")])
     if len(cfgfiles) > 0:
         logger.info("Parsed config from " + string.join(cfgfiles, ', '))
-        print "Loaded config from " + string.join(cfgfiles, ', ')
         apply_config(cfg, logger)
     else:
         logger.info("No config files to load, using defaults")
         print "No config files to load, using defaults"
 
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_token, access_token_secret)
-api = tweepy.API(auth)
+def load_keys(logger):
+    cfg = ConfigParser.SafeConfigParser()
+    cfgfiles = cfg.read("gribbit.keys")
+    if len(cfgfiles) > 0:
+        logger.info("Reading gribbit.keys")
+        if cfg.has_section("keys"):
+            auth = tweepy.OAuthHandler(cfg.get("keys", "consumer_key"), cfg.get("keys", "consumer_secret"))
+            auth.set_access_token(cfg.get("keys", "access_token"), cfg.get("keys", "access_token_secret"))
+            api = tweepy.API(auth)
+            logger.info("Loaded keys from gribbit.keys")
+        else:
+            logger.critical("Malformed gribbit.keys file")
+            raise MalformedKeyFile
+    else:
+        logger.critical("No gribbit.keys file")
+        raise KeyFileNotFound
+
+    return api
 
 logger = setup_logging("gribbit", log_debug=options["log_debug"])
 load_config(logger)
+
+try:
+    api = load_keys(logger)
+except MalformedKeyFile:
+    print "Looks like gribbit.keys isn't correctly written. Please check"
+    print "the documentation for the right format."
+    sys.exit(1)
+except KeyFileNotFound:
+    print "Couldn't read gribbit.keys - please check the documentation for what to do."
+    sys.exit(2)
 
 wakeup_queue = Queue.Queue()
 logger.debug("Created queue")
@@ -95,7 +121,13 @@ if options["catch_hup"]:
 indent = " " * 17
 w = textwrap.TextWrapper(width=92, subsequent_indent=indent)
 
-tl = api.friends_timeline()
+# If we hit an error at this stage, assume invalid keys. Could still be Twitter down...
+try:
+    tl = api.friends_timeline()
+except tweepy.error.TweepError:
+    logger.critical("API error trying to update. Are your keys valid? Is Twitter up?")
+    print "Error trying to get tweets. Possible causes - invalid keys, Twitter has gone down..."
+    sys.exit(3)
 
 while 1:
     logger.debug("Processing %i tweets", len(tl))
@@ -125,7 +157,6 @@ while 1:
         else:
             logger.info("Got signal, item has no string rep")
         logger.info("Reloading config file")
-        print "Reloading config file"
         load_config(logger)
         wakeup_queue.task_done()
     except Queue.Empty:
@@ -137,7 +168,11 @@ while 1:
         break
 
     logger.debug("Requesting tweets since %i", last_id)
-    tl = api.friends_timeline(since_id=last_id, count=1000)
+    try:
+        tl = api.friends_timeline(since_id=last_id, count=1000)
+    except tweepy.error.TweepError:
+        logger.warning("Got API error updating timeline; stalling to see if Twitter recovers.")
+        tl = []
 
 if options["catch_hup"]:
     # Restore old handler
