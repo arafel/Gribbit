@@ -13,6 +13,7 @@ from gribbit_keys import *
 
 options = { "catch_hup" : True,
             "log_debug" : False,
+            "text_wrap" : True,
             # value in minutes
             "update_frequency" : 5 }
 
@@ -47,6 +48,9 @@ def apply_config(cfg, logger):
             if section == "gribbit" and option == "catch_hup":
                 options["catch_hup"] = cfg.getboolean(section, option)
                 logger.info("Set options.catch_hup to " + options["catch_hup"].__str__())
+            if section == "gribbit" and option == "text_wrap":
+                options["catch_hup"] = cfg.getboolean(section, option)
+                logger.info("Set options.text_wrap to " + options["text_wrap"].__str__())
             if section == "gribbit" and option == "log_debug":
                 options["log_debug"] = cfg.getboolean(section, option)
                 logger.info("Set options.log_debug to " + options["log_debug"].__str__())
@@ -106,9 +110,11 @@ while 1:
         else:
             time_format = "      %H:%M:%S"
         text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, tweet.text)
-        lines = w.wrap(text)
-        for line in lines:
-            print line
+        if options["text_wrap"]:
+            for line in w.wrap(text):
+                print line
+        else:
+            print text
         last_id = tweet.id
 
     try:
