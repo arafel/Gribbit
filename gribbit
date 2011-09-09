@@ -49,7 +49,7 @@ def apply_config(cfg, logger):
                 options["catch_hup"] = cfg.getboolean(section, option)
                 logger.info("Set options.catch_hup to " + options["catch_hup"].__str__())
             if section == "gribbit" and option == "text_wrap":
-                options["catch_hup"] = cfg.getboolean(section, option)
+                options["text_wrap"] = cfg.getboolean(section, option)
                 logger.info("Set options.text_wrap to " + options["text_wrap"].__str__())
             if section == "gribbit" and option == "log_debug":
                 options["log_debug"] = cfg.getboolean(section, option)
