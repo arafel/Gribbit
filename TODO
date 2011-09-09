@@ -1,0 +1,5 @@
+* check precedence order of files given to SafeConfigParser - what if config
+  settings conflict? Which settings "win", the ones in the first or in the last file?
+* discover width of the window we're in (and react to changes???) so we know
+  how wide to make the TextWrapper instance
+
