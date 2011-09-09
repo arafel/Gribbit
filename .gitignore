@@ -2,3 +2,4 @@
 *.swp
 gribbit_keys.py
 *.log
+*.bin
