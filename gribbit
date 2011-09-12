@@ -10,11 +10,16 @@ import sys, os
 
 import tweepy
 
+MINUTE=60
+VERSION = "0.0.1"
+
 options = { "catch_hup" : True,
             "log_debug" : False,
-            "text_wrap" : True,
+            "text_wrap" : "auto",
             # value in minutes
             "update_frequency" : 5 }
+
+# Custom exceptions
 
 class MalformedKeyFile(Exception):
     def __init__(self):
@@ -23,6 +28,72 @@ class MalformedKeyFile(Exception):
 class KeyFileNotFound(IOError):
     def __init__(self):
         pass
+
+# Worker functions
+
+# Try various means to find a terminal size, defaulting to 80x25 if not found.
+# Taken from Chuck Blake's 'cls' program at http://pdos.csail.mit.edu/~cblake/cls/cls.py
+def get_terminal_size():
+    def ioctl_getwinsize(fd):
+        try: ### Discover terminal width
+            import fcntl, termios, struct, os
+            cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
+        except:
+            return None
+        return cr
+
+    ### decide on *some* terminal size
+    # try open fds
+    cr = ioctl_getwinsize(0) or ioctl_getwinsize(1) or ioctl_getwinsize(2)
+    if not cr:
+        # ...then ctty
+        try:
+            fd = os.open(os.ctermid(), os.O_RDONLY)
+            cr = ioctl_getwinsize(fd)
+            os.close(fd)
+        except:
+            pass
+        if not cr:
+            # env vars or finally defaults
+            try:
+                cr = (env['LINES'], env['COLUMNS'])
+            except:
+                cr = (25, 80)
+
+    # reverse rows, cols
+    return int(cr[1]), int(cr[0])
+
+def is_number(string):
+    try:
+        dummy = int(string)
+        return True
+    except ValueError:
+        return False
+
+def get_wrap_width(opt, logger):
+    logger.debug("get_wrap_width processing string '%s'", opt)
+    tmp = string.lower(opt)
+    width = 0
+    if tmp == "auto":
+        logger.info("Automatic wrap width, getting terminal size")
+        width, height = get_terminal_size()
+        logger.debug("Got %ix%i", width, height)
+        # Think it looks better with a character 'border'
+        width = width - 1
+    elif is_number(tmp):
+        logger.debug("Number '%s', using that", tmp)
+        # If they've specified a number, don't adjust it.
+        width = int(tmp)
+    elif tmp == "off":
+        logger.debug("tmp is 'off', leaving width at %i", width)
+        logger.info("Word wrap is off.")
+    else:
+        logger.error("Invalid text_wrap value '%s'", tmp)
+        raise ValueError, ("Invalid text_wrap value '%s'" % opt)
+
+    return width
+
+# Main functions
 
 def setup_logging(name, log_debug=False):
     logger = logging.getLogger(name)
@@ -63,12 +134,16 @@ def apply_config(cfg, logger):
                 options["catch_hup"] = cfg.getboolean(section, option)
                 logger.info("Set options.catch_hup to " + options["catch_hup"].__str__())
             if section == "gribbit" and option == "text_wrap":
-                options["text_wrap"] = cfg.getboolean(section, option)
-                logger.info("Set options.text_wrap to " + options["text_wrap"].__str__())
+                options["text_wrap"] = get_wrap_width(cfg.get(section, option), logger)
+                logger.info("Set text_wrap option to %i", options["text_wrap"])
             if section == "updates" and option == "frequency":
                 options["update_frequency"] = cfg.getint(section, option)
                 logger.info("Set options.update_frequency to %i", options["update_frequency"])
-
+    
+    # Default value, better populate it
+    if options["text_wrap"] == "auto":
+        options["text_wrap"] = get_wrap_width("auto", logger)
+        logger.debug("Set text_wrap option to %i", options["text_wrap"])
 
 def load_config(logger):
     cfg = ConfigParser.SafeConfigParser()
@@ -99,9 +174,21 @@ def load_keys(logger):
 
     return api
 
-logger = setup_logging("gribbit", log_debug=options["log_debug"])
-load_config(logger)
+### Start program
 
+# Set up logging and say we're starting
+logger = setup_logging("gribbit", log_debug=options["log_debug"])
+logger.info("gribbit %s starting up" % VERSION)
+
+# Try to get the config files
+try:
+    load_config(logger)
+except Exception, e:
+    print "Error loading config file. Please check output and log file and fix the problem."
+    print "Reported problem: ", string.join(e.args)
+    sys.exit(1)
+
+# Now try to load the Twitter keys.
 try:
     api = load_keys(logger)
 except MalformedKeyFile:
@@ -112,19 +199,23 @@ except KeyFileNotFound:
     print "Couldn't read gribbit.keys - please check the documentation for what to do."
     sys.exit(2)
 
+# Queue is used for telling the main (and only) thread that a signal happened
 wakeup_queue = Queue.Queue()
 logger.debug("Created queue")
 
-MINUTE=60
+# Initial values
 old_date = ""
 last_id = -1
 
+# If we're supposed to catch HUP then install the signal handler
 if options["catch_hup"]:
     logger.debug("Installing HUP handler")
     old_handler = signal.signal(signal.SIGHUP, handler)
 
+# The date + time take up 17 spaces. Make wrapped lines indent by that much too.
 indent = " " * 17
-w = textwrap.TextWrapper(width=92, subsequent_indent=indent)
+if options["text_wrap"] > 0:
+    w = textwrap.TextWrapper(width=options["text_wrap"], subsequent_indent=indent)
 
 # If we hit an error at this stage, assume invalid keys. Could still be Twitter down...
 try:
@@ -147,7 +238,7 @@ while 1:
         else:
             time_format = "      %H:%M:%S"
         text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, tweet.text)
-        if options["text_wrap"]:
+        if options["text_wrap"] > 0:
             for line in w.wrap(text):
                 print line
         else:
