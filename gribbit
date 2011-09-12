@@ -44,22 +44,27 @@ def handler(signum, frame):
     wakeup_queue.put(signum)
 
 def apply_config(cfg, logger):
+    # Process debug logging first so the other options get caught
+    if cfg.has_option("gribbit", "log_debug"):
+        logger.debug("Processing [%s, %s]" % ("gribbit", "log_debug"))
+        options["log_debug"] = cfg.getboolean("gribbit", "log_debug")
+        logger.info("Set options.log_debug to " + options["log_debug"].__str__())
+        if options["log_debug"]:
+            logger.setLevel(logging.DEBUG)
+        else:
+            logger.setLevel(logging.INFO)
+
+    # Now do the others
     for section in cfg.sections():
         for option in cfg.options(section):
-            logger.debug("Processing [%s, %s]" % (section, option))
+            if section != "gribbit" or option != "log_debug":
+                logger.debug("Processing [%s, %s]" % (section, option))
             if section == "gribbit" and option == "catch_hup":
                 options["catch_hup"] = cfg.getboolean(section, option)
                 logger.info("Set options.catch_hup to " + options["catch_hup"].__str__())
             if section == "gribbit" and option == "text_wrap":
                 options["text_wrap"] = cfg.getboolean(section, option)
                 logger.info("Set options.text_wrap to " + options["text_wrap"].__str__())
-            if section == "gribbit" and option == "log_debug":
-                options["log_debug"] = cfg.getboolean(section, option)
-                logger.info("Set options.log_debug to " + options["log_debug"].__str__())
-                if options["log_debug"]:
-                    logger.setLevel(logging.DEBUG)
-                else:
-                    logger.setLevel(logging.INFO)
             if section == "updates" and option == "frequency":
                 options["update_frequency"] = cfg.getint(section, option)
                 logger.info("Set options.update_frequency to %i", options["update_frequency"])
