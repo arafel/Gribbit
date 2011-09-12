@@ -37,7 +37,8 @@ def get_terminal_size():
     def ioctl_getwinsize(fd):
         try: ### Discover terminal width
             import fcntl, termios, struct, os
-            cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
+            cr = struct.unpack('hh', \
+                                fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
         except:
             return None
         return cr
@@ -55,10 +56,8 @@ def get_terminal_size():
             pass
         if not cr:
             # env vars or finally defaults
-            try:
-                cr = (env['LINES'], env['COLUMNS'])
-            except:
-                cr = (25, 80)
+            cr[0] = os.environ.get("LINES", "25")
+            cr[1] = os.environ.get("COLUMNS", "80")
 
     # reverse rows, cols
     return int(cr[1]), int(cr[0])
