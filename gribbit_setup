@@ -1,6 +1,77 @@
 #!/usr/bin/env python
 
-import string
+import string, sys, logging
+import ConfigParser
 import tweepy
 
+VERSION = "0.0.1"
 
+def setup_logging(name, log_debug=False):
+    logger = logging.getLogger(name)
+    if log_debug:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
+    # Create a file handler which even logs debug messages
+    fh = logging.FileHandler(name + ".log")
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logging.getLogger('').addHandler(fh)
+    return logger
+
+def load_gribbit_keys(logger):
+    cfg = ConfigParser.SafeConfigParser()
+    cfgfiles = cfg.read("gribbit.keys")
+    if len(cfgfiles) > 0:
+        logger.info("Reading keyfiles")
+        if cfg.has_section("keys"):
+            if not cfg.has_option("keys", "consumer_key") or not cfg.has_option("keys", "consumer_secret"):
+                logger.critical("Malformed gribbit.keys file")
+                raise MalformedGribbitKeyFile
+            else:
+                auth = tweepy.OAuthHandler(cfg.get("keys", "consumer_key"), cfg.get("keys", "consumer_secret"))
+                logger.info("Loaded keys from gribbit.keys")
+        else:
+            logger.critical("Malformed gribbit.keys")
+            raise MalformedKeyFile
+    else:
+        logger.critical("No gribbit.keys file")
+        raise KeyFileNotFound
+
+    return auth
+
+def save_user_keys(logger, key, secret):
+    logger.info("Saving user keys")
+    cfg = ConfigParser.SafeConfigParser()
+    cfg.add_section("keys")
+    cfg.set("keys", "access_token", key)
+    cfg.set("keys", "access_token_secret", secret)
+    # os.path.expanduser("~/.gribbit.user.keys")
+    try:
+        with open("user.keys", "wb") as configfile:
+            cfg.write(configfile)
+        logger.info("Wrote user.keys")
+        print "Wrote user.keys"
+    except:
+        logger.critical("Unable to open and write config file.")
+        print "Unable to open and write config file."
+
+logger = setup_logging("gribbit_setup", log_debug=False)
+logger.info("gribbit_setup %s starting up" % VERSION)
+
+auth = load_gribbit_keys(logger)
+
+redirect_url = auth.get_authorization_url()
+logger.debug("Redirect URL: %s", redirect_url)
+
+print "Authorisation URL:", redirect_url
+print "Please visit the address above, and then enter the verification code:",
+sys.stdout.flush()
+verifier = raw_input()
+
+logger.debug("Verifier code: %s", verifier)
+token = auth.get_access_token(verifier)
+save_user_keys(logger, token.key, token.secret)
+logger.info("Finished.")
+print "Finished."
