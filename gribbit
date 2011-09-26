@@ -21,6 +21,14 @@ options = { "catch_hup" : True,
 
 # Custom exceptions
 
+class MalformedGribbitKeyFile(Exception):
+    def __init__(self):
+        pass
+
+class MalformedUserKeyFile(Exception):
+    def __init__(self):
+        pass
+
 class MalformedKeyFile(Exception):
     def __init__(self):
         pass
@@ -159,16 +167,23 @@ def load_config(logger):
 
 def load_keys(logger):
     cfg = ConfigParser.SafeConfigParser()
-    cfgfiles = cfg.read("gribbit.keys")
+    cfgfiles = cfg.read(["gribbit.keys", "user.keys"])
     if len(cfgfiles) > 0:
-        logger.info("Reading gribbit.keys")
+        logger.info("Reading keyfiles")
         if cfg.has_section("keys"):
-            auth = tweepy.OAuthHandler(cfg.get("keys", "consumer_key"), cfg.get("keys", "consumer_secret"))
-            auth.set_access_token(cfg.get("keys", "access_token"), cfg.get("keys", "access_token_secret"))
-            api = tweepy.API(auth)
-            logger.info("Loaded keys from gribbit.keys")
+            if not cfg.has_option("keys", "consumer_key") or not cfg.has_option("keys", "consumer_secret"):
+                logger.critical("Malformed gribbit.keys file")
+                raise MalformedGribbitKeyFile
+            elif not cfg.has_option("keys", "access_token") or not cfg.has_option("keys", "access_token_secret"):
+                logger.critical("Malformed user.keys file")
+                raise MalformedUserKeyFile
+            else:
+                auth = tweepy.OAuthHandler(cfg.get("keys", "consumer_key"), cfg.get("keys", "consumer_secret"))
+                auth.set_access_token(cfg.get("keys", "access_token"), cfg.get("keys", "access_token_secret"))
+                api = tweepy.API(auth)
+                logger.info("Loaded keys from gribbit.keys and user.keys")
         else:
-            logger.critical("Malformed gribbit.keys file")
+            logger.critical("Malformed gribbit.keys and user.keys files")
             raise MalformedKeyFile
     else:
         logger.critical("No gribbit.keys file")
@@ -193,8 +208,16 @@ except Exception, e:
 # Now try to load the Twitter keys.
 try:
     api = load_keys(logger)
-except MalformedKeyFile:
+except MalformedUserKeyFile:
+    print "Looks like user.keys isn't correctly written. Please check"
+    print "the documentation for the right format."
+    sys.exit(1)
+except MalformedGribbitKeyFile:
     print "Looks like gribbit.keys isn't correctly written. Please check"
+    print "the documentation for the right format."
+    sys.exit(1)
+except MalformedKeyFile:
+    print "Looks like both gribbit.keys and user.keys aren't correctly written. Please check"
     print "the documentation for the right format."
     sys.exit(1)
 except KeyFileNotFound:

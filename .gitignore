@@ -4,3 +4,4 @@ gribbit_keys.py
 *.log
 *.bin
 gribbit.keys
+user.keys
