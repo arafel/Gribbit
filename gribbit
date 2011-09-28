@@ -11,7 +11,7 @@ import sys, os
 import tweepy
 
 MINUTE=60
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 
 options = { "catch_hup" : True,
             "log_debug" : False,
@@ -205,104 +205,111 @@ def main(argv=None):
     logger = setup_logging("gribbit", log_debug=options["log_debug"])
     logger.info("gribbit %s starting up" % VERSION)
 
-    # Try to get the config files
     try:
-        load_config(logger)
-    except Exception, e:
-        print "Error loading config file. Please check output and log file and fix the problem."
-        print "Reported problem: ", string.join(e.args)
-        return 1
 
-    # Now try to load the Twitter keys.
-    try:
-        api = load_keys(logger)
-    except MalformedUserKeyFile:
-        print "Looks like user.keys isn't correctly written. Please check"
-        print "the documentation for the right format."
-        return 1
-    except MalformedGribbitKeyFile:
-        print "Looks like gribbit.keys isn't correctly written. Please check"
-        print "the documentation for the right format."
-        return 1
-    except MalformedKeyFile:
-        print "Looks like both gribbit.keys and user.keys aren't correctly written. Please check"
-        print "the documentation for the right format."
-        return 1
-    except KeyFileNotFound:
-        print "Couldn't read gribbit.keys - please check the documentation for what to do."
-        return 2
-
-    # Initial values
-    old_date = ""
-    last_id = "-1"
-
-    # If we're supposed to catch HUP then install the signal handler
-    if options["catch_hup"]:
-        logger.debug("Installing HUP handler")
-        old_handler = signal.signal(signal.SIGHUP, handler)
-
-    # The date + time take up 17 spaces. Make wrapped lines indent by that much too.
-    indent = " " * 17
-    if options["text_wrap"] > 0:
-        w = textwrap.TextWrapper(width=options["text_wrap"], subsequent_indent=indent)
-
-    # If we hit an error at this stage, assume invalid keys. Could still be Twitter down...
-    try:
-        tl = api.friends_timeline()
-    except tweepy.error.TweepError:
-        logger.critical("API error trying to update. Are your keys valid? Is Twitter up?")
-        print "Error trying to get tweets. Possible causes - invalid keys, Twitter has gone down..."
-        return 3
-
-    while 1:
-        logger.debug("Processing %i tweets", len(tl))
-
-        tl.reverse()
-        for tweet in tl:
-            new_date = tweet.created_at.strftime("%Y/%m/%d")
-            if new_date != old_date:
-                logger.info("Date changed from '%s' to '%s'", old_date, new_date)
-                time_format = "%m/%d %H:%M:%S"
-                old_date = new_date
-            else:
-                time_format = "      %H:%M:%S"
-            text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, tweet.text)
-            if options["text_wrap"] > 0:
-                for line in w.wrap(text):
-                    print line
-            else:
-                print text
-            last_id = tweet.id_str
-
+        # Try to get the config files
         try:
-            item = wakeup_queue.get(True, options["update_frequency"] * MINUTE)
-            # If we reach this line we got a signal
-            if hasattr(item, "__str__"):
-                logger.info("Got signal %s", item.__str__())
-            else:
-                logger.info("Got signal, item has no string rep")
-            logger.info("Reloading config file")
             load_config(logger)
-            wakeup_queue.task_done()
-        except Queue.Empty:
-            # This is the usual case - timeout
-            pass
-        except KeyboardInterrupt:
-            print "Ctrl-C detected"
-            logger.warn("Ctrl-C detected")
-            break
+        except Exception, e:
+            print "Error loading config file. Please check output and log file and fix the problem."
+            print "Reported problem: ", string.join(e.args)
+            return 1
 
-        logger.debug("Requesting tweets since %s", last_id)
+        # Now try to load the Twitter keys.
         try:
-            tl = api.friends_timeline(since_id=last_id, count=1000)
-        except tweepy.error.TweepError:
-            logger.warning("Got API error updating timeline; stalling to see if Twitter recovers.")
-            tl = []
+            api = load_keys(logger)
+        except MalformedUserKeyFile:
+            print "Looks like user.keys isn't correctly written. Please check"
+            print "the documentation for the right format."
+            return 1
+        except MalformedGribbitKeyFile:
+            print "Looks like gribbit.keys isn't correctly written. Please check"
+            print "the documentation for the right format."
+            return 1
+        except MalformedKeyFile:
+            print "Looks like both gribbit.keys and user.keys aren't correctly written. Please check"
+            print "the documentation for the right format."
+            return 1
+        except KeyFileNotFound:
+            print "Couldn't read gribbit.keys - please check the documentation for what to do."
+            return 2
 
-    if options["catch_hup"]:
-        # Restore old handler
-        logger.debug("Restoring old HUP handler")
-        signal.signal(signal.SIGHUP, old_handler)
+        # Initial values
+        old_date = ""
+        last_id = "-1"
+
+        # If we're supposed to catch HUP then install the signal handler
+        if options["catch_hup"]:
+            logger.debug("Installing HUP handler")
+            old_handler = signal.signal(signal.SIGHUP, handler)
+
+        # The date + time take up 17 spaces. Make wrapped lines indent by that much too.
+        indent = " " * 17
+        if options["text_wrap"] > 0:
+            w = textwrap.TextWrapper(width=options["text_wrap"], subsequent_indent=indent)
+
+        # If we hit an error at this stage, assume invalid keys. Could still be Twitter down...
+        try:
+            tl = api.friends_timeline()
+        except tweepy.error.TweepError:
+            logger.critical("API error trying to update. Are your keys valid? Is Twitter up?")
+            print "Error trying to get tweets. Possible causes - invalid keys, Twitter has gone down..."
+            return 3
+
+        while 1:
+            logger.debug("Processing %i tweets", len(tl))
+
+            tl.reverse()
+            for tweet in tl:
+                new_date = tweet.created_at.strftime("%Y/%m/%d")
+                if new_date != old_date:
+                    logger.info("Date changed from '%s' to '%s'", old_date, new_date)
+                    time_format = "%m/%d %H:%M:%S"
+                    old_date = new_date
+                else:
+                    time_format = "      %H:%M:%S"
+                text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, tweet.text)
+                if options["text_wrap"] > 0:
+                    for line in w.wrap(text):
+                        print line
+                else:
+                    print text
+                last_id = tweet.id_str
+
+            try:
+                item = wakeup_queue.get(True, options["update_frequency"] * MINUTE)
+                # If we reach this line we got a signal
+                if hasattr(item, "__str__"):
+                    logger.info("Got signal %s", item.__str__())
+                else:
+                    logger.info("Got signal, item has no string rep")
+                logger.info("Reloading config file")
+                load_config(logger)
+                wakeup_queue.task_done()
+            except Queue.Empty:
+                # This is the usual case - timeout
+                pass
+            except KeyboardInterrupt:
+                print "Ctrl-C detected"
+                logger.info("Ctrl-C detected")
+                break
+
+            logger.debug("Requesting tweets since %s", last_id)
+            try:
+                tl = api.friends_timeline(since_id=last_id, count=1000)
+            except tweepy.error.TweepError:
+                logger.warning("Got API error updating timeline; stalling to see if Twitter recovers.")
+                tl = []
+
+        if options["catch_hup"]:
+            # Restore old handler
+            logger.debug("Restoring old HUP handler")
+            signal.signal(signal.SIGHUP, old_handler)
+
+    except Exception, e:
+        # Final Exception catcher - don't let the user just see a crash.
+        logger.critical("Uncaught exception", exc_info=1)
+        print "Sorry - Gribbit crashed. Please send gribbit.log to gribbit@blacksun.org.uk"
 
 if __name__ == "__main__":
     sys.exit(main())
