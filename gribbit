@@ -11,7 +11,7 @@ import sys, os
 import tweepy
 
 MINUTE=60
-VERSION = "0.0.4"
+VERSION = "0.0.5"
 
 options = { "catch_hup" : True,
             "log_debug" : False,
@@ -67,6 +67,7 @@ def get_terminal_size():
             pass
         if not cr:
             # env vars or finally defaults
+            cr = {}
             cr[0] = os.environ.get("LINES", "25")
             cr[1] = os.environ.get("COLUMNS", "80")
 
