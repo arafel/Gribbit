@@ -11,11 +11,12 @@ import sys, os
 import tweepy
 
 MINUTE=60
-VERSION = "0.0.5"
+VERSION = "0.0.6"
 
 options = { "catch_hup" : True,
             "log_debug" : False,
             "text_wrap" : "auto",
+            "ignored_users" : [],
             # value in minutes
             "update_frequency" : 5 }
 
@@ -150,6 +151,10 @@ def apply_config(cfg, logger):
             if section == "updates" and option == "frequency":
                 options["update_frequency"] = cfg.getint(section, option)
                 logger.info("Set options.update_frequency to %i", options["update_frequency"])
+            if section == "ignore" and option == "users":
+                # TODO put this in options
+                options["ignored_users"] = string.split(cfg.get(section, option), ",")
+                logger.info("Ignoring the following users: %s" % options["ignored_users"].__str__())
     
     # Default value, better populate it
     if options["text_wrap"] == "auto":
@@ -168,6 +173,8 @@ def load_config(logger):
     else:
         logger.info("No config files to load, using defaults")
         print "No config files to load, using defaults"
+
+    return cfg
 
 def load_keys(logger):
     cfg = ConfigParser.SafeConfigParser()
@@ -251,6 +258,7 @@ def main(argv=None):
 
         # If we hit an error at this stage, assume invalid keys. Could still be Twitter down...
         try:
+            logger.debug("Requesting initial batch of tweets")
             tl = api.friends_timeline()
         except tweepy.error.TweepError:
             logger.critical("API error trying to update. Are your keys valid? Is Twitter up?")
@@ -262,6 +270,10 @@ def main(argv=None):
 
             tl.reverse()
             for tweet in tl:
+                if tweet.user.screen_name in options["ignored_users"] or tweet.user.name in options["ignored_users"]:
+                    logger.debug("Ignoring tweet by %s (%s)" % (tweet.user.screen_name, tweet.user.name))
+                    continue
+
                 new_date = tweet.created_at.strftime("%Y/%m/%d")
                 if new_date != old_date:
                     logger.info("Date changed from '%s' to '%s'", old_date, new_date)
