@@ -3,7 +3,7 @@
 import time, logging
 import ConfigParser, string
 import signal, Queue
-import textwrap
+import textwrap, htmllib
 
 import tabnanny
 import sys, os
@@ -22,6 +22,10 @@ options = { "catch_hup" : True,
 
 # Queue is used for telling the main (and only) thread that a signal happened
 wakeup_queue = Queue.Queue()
+
+# Create it once, avoids littering objects around
+# Note: htmllib has been removed for Python3. Will need to find an alternative.
+htmlparser = htmllib.HTMLParser(None)
 
 # Custom exceptions
 
@@ -42,6 +46,11 @@ class KeyFileNotFound(IOError):
         pass
 
 # Worker functions
+
+def unescape(s):
+    htmlparser.save_bgn()
+    htmlparser.feed(s)
+    return htmlparser.save_end()
 
 # Try various means to find a terminal size, defaulting to 80x25 if not found.
 # Taken from Chuck Blake's 'cls' program at http://pdos.csail.mit.edu/~cblake/cls/cls.py
@@ -281,7 +290,9 @@ def main(argv=None):
                     old_date = new_date
                 else:
                     time_format = "      %H:%M:%S"
-                text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, tweet.text)
+               
+                text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, unescape(tweet.text))
+
                 if options["text_wrap"] > 0:
                     for line in w.wrap(text):
                         print line
