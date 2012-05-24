@@ -125,7 +125,7 @@ def setup_logging(name, log_debug=False):
     # Create a file handler which even logs debug messages
     fh = logging.FileHandler(name + ".log")
     fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(funcName)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
     logging.getLogger('').addHandler(fh)
     return logger
