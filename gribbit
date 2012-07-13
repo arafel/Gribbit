@@ -9,14 +9,17 @@ import tabnanny
 import sys, os
 
 import tweepy
+import pytz, datetime
 
 MINUTE=60
-VERSION = "0.0.6"
+VERSION = "0.0.7"
 
 options = { "catch_hup" : True,
             "log_debug" : False,
             "text_wrap" : "auto",
             "ignored_users" : [],
+            # Very local of me but I have to pick somewhere...
+            "timezone" : "Europe/London",
             # value in minutes
             "update_frequency" : 5 }
 
@@ -161,10 +164,12 @@ def apply_config(cfg, logger):
                 options["update_frequency"] = cfg.getint(section, option)
                 logger.info("Set options.update_frequency to %i", options["update_frequency"])
             if section == "ignore" and option == "users":
-                # TODO put this in options
                 options["ignored_users"] = string.split(cfg.get(section, option), ",")
                 logger.info("Ignoring the following users: %s" % options["ignored_users"].__str__())
-    
+            if section == "gribbit" and option == "timezone":
+                options["timezone"] = cfg.get(section, option)
+                logger.info("Using the timezone %s" % options["timezone"])
+ 
     # Default value, better populate it
     if options["text_wrap"] == "auto":
         options["text_wrap"] = get_wrap_width("auto", logger)
@@ -211,6 +216,16 @@ def load_keys(logger):
 
     return api
 
+def make_local_time(logger, local_timezone, dt):
+    logger.debug("Got time %s" % dt)
+    # We have to make a UTC flavour of datetime, because we can't just flip a
+    # bit on the incoming dt to say "yes, this is already UTC". Yes, this is tedious.
+    utc_dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, \
+                                    dt.minute, dt.second, tzinfo=pytz.utc)
+    local_time = utc_dt.astimezone(local_timezone)
+    logger.debug("Localized to %s" % (local_time))
+    return local_time
+
 ### Start program
 
 def main(argv=None):
@@ -255,6 +270,8 @@ def main(argv=None):
         old_date = ""
         last_id = "-1"
 
+        local_timezone = pytz.timezone(options["timezone"])
+
         # If we're supposed to catch HUP then install the signal handler
         if options["catch_hup"]:
             logger.debug("Installing HUP handler")
@@ -283,7 +300,9 @@ def main(argv=None):
                     logger.debug("Ignoring tweet by %s (%s)" % (tweet.user.screen_name, tweet.user.name))
                     continue
 
-                new_date = tweet.created_at.strftime("%Y/%m/%d")
+                tweet_time = make_local_time(logger, local_timezone, tweet.created_at)
+
+                new_date = tweet_time.strftime("%Y/%m/%d")
                 if new_date != old_date:
                     logger.info("Date changed from '%s' to '%s'", old_date, new_date)
                     time_format = "%m/%d %H:%M:%S"
@@ -291,7 +310,10 @@ def main(argv=None):
                 else:
                     time_format = "      %H:%M:%S"
                
-                text = "%s - %s: %s" % (tweet.created_at.strftime(time_format), tweet.user.screen_name, unescape(tweet.text))
+                text = "%s - %s: %s" % \
+                        (tweet_time.strftime(time_format), \
+                         tweet.user.screen_name, 
+                         unescape(tweet.text))
 
                 if options["text_wrap"] > 0:
                     for line in w.wrap(text):
