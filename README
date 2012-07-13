@@ -2,6 +2,12 @@ Depends on:
 
 * Tweepy - http://code.google.com/p/tweepy/
 
+* PyTZ - http://pypi.python.org/pypi/pytz/
+
+  PyTZ may be packaged under several names; for Debian it is python-tz, for
+  Fedora I believe it's under pytz.
+
+
 Licensed under:
 
 * GPL v3.0, http://www.gnu.org/licenses/gpl.html
