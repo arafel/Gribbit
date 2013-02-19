@@ -12,7 +12,7 @@ import tweepy
 import pytz, datetime
 
 MINUTE=60
-VERSION = "0.0.7"
+VERSION = "0.0.8"
 
 options = { "catch_hup" : True,
             "log_debug" : False,
@@ -266,6 +266,11 @@ def main(argv=None):
             print "Couldn't read gribbit.keys - please check the documentation for what to do."
             return 2
 
+        try:
+            timeline_function = api.friends_timeline
+        except AttributeError:
+            timeline_function = api.home_timeline
+
         # Initial values
         old_date = ""
         last_id = "-1"
@@ -285,7 +290,7 @@ def main(argv=None):
         # If we hit an error at this stage, assume invalid keys. Could still be Twitter down...
         try:
             logger.debug("Requesting initial batch of tweets")
-            tl = api.friends_timeline()
+            tl = timeline_function()
         except tweepy.error.TweepError:
             logger.critical("API error trying to update. Are your keys valid? Is Twitter up?")
             print "Error trying to get tweets. Possible causes - invalid keys, Twitter has gone down..."
@@ -342,7 +347,7 @@ def main(argv=None):
 
             logger.debug("Requesting tweets since %s", last_id)
             try:
-                tl = api.friends_timeline(since_id=last_id, count=1000)
+                tl = timeline_function(since_id=last_id, count=1000)
             except tweepy.error.TweepError:
                 logger.warning("Got API error updating timeline; stalling to see if Twitter recovers.")
                 tl = []
